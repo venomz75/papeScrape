@@ -1,5 +1,3 @@
-papeScrape
-
 papeScrape is a basic Python webscraper which downloads all of the images within a thread. It is still under development so it is not as feature rich as I'd like it to be at the moment (but it still works).
 
 Current features:
