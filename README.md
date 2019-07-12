@@ -5,9 +5,6 @@
 * Selection of threads within chosen board
 * Download all images in a thread, one thread at a time
 
-## Known bugs:
-* Thread topics with invalid directory characters e.g. "/" will cause the creation of directory and consequentially download no images.
-
 ## Planned changes:
 * Improve naming for threads with no subject.
 * Add selection of boards by tag or name (wg or Wallpapers/General).

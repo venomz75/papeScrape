@@ -85,6 +85,7 @@ data = requests.get(thread)
 soup = BeautifulSoup(data.text, 'html.parser')
 opText = soup.find("blockquote", {"class": "postMessage"}).text
 
+threadSubjects[threadSelection] = re.sub('[^A-Za-z0-9]+', '', threadSubjects[threadSelection])
 newdir = boardTags[boardSelection]+"/"+threadSubjects[threadSelection]
 print(newdir)
 
