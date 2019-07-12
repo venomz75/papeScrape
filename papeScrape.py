@@ -36,8 +36,7 @@ def scrapeBoards():
         print(str(i).zfill(2)+") /"+boardTags[i]+"/ - "+boardNames[i])
     boardSelection = input("\nChoose your board: ")
     boardSelection = int(boardSelection)
-    return boardSelection
-   
+    return boardSelection 
 
 
 
@@ -73,6 +72,7 @@ def scrapeThreads(boardSelection):
     return threadSelection
 
 
+
 def scrapeImages(boardSelection, threadSelection):
     try:
         threadSelection = int(threadSelection)
@@ -91,18 +91,21 @@ def scrapeImages(boardSelection, threadSelection):
     if threadSubjects[threadSelection] == "No subject":
         threadSubjects[threadSelection] = threadSubjects[threadSelection]+threadNumbers[threadSelection]
     threadSubjects[threadSelection] = re.sub('[^A-Za-z0-9]+', '', threadSubjects[threadSelection])
-    newdir = boardTags[boardSelection]+"/"+threadSubjects[threadSelection]+"/"
+    newdir = filepath+"/"+boardTags[boardSelection]+"/"+threadSubjects[threadSelection]+"/"
 
     try:
-        os.mkdir(boardTags[boardSelection])
-        os.mkdir(newdir)
+        if os.path.isdir(filepath+"/"+boardTags[boardSelection]):
+            os.mkdir(newdir)  
+        else:
+            os.mkdir(boardTags[boardSelection])
+            os.mkdir(newdir)
     except OSError:
         print("\nFailed to create directory "+newdir)
         print("\nExiting papeScrape...\n")
     else:
         print("\nCreated directory "+newdir+" successfully")
         opText = soup.find("blockquote", {"class": "postMessage"}).text
-        textFile = open(filepath+"/"+newdir+"op.txt", "w")
+        textFile = open(newdir+"op.txt", "w")
         textFile.write(opText)
         textFile.close()
         print("\nSaved OP message as "+newdir+"op.txt\n")
@@ -112,7 +115,7 @@ def scrapeImages(boardSelection, threadSelection):
             results.append(a["href"])
 
         for i in results:
-            urllib.request.urlretrieve("http:"+i, filepath+"/"+newdir+i[19:])
+            urllib.request.urlretrieve("http:"+i, newdir+i[19:])
             print("Downloaded "+i[19:])
         print("\nAll images downloaded.")
         print("\nExiting papeScrape...\n")
