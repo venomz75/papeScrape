@@ -4,9 +4,9 @@
 * Selection of boards
 * Selection of threads within chosen board
 * Download all images in a thread, one thread at a time
+* Saves OP message in an op.txt file
 
 ## Planned changes:
-* Improve naming for threads with no subject.
 * Add selection of boards by tag or name (wg or Wallpapers/General).
 * Add selection of threads by post number or topic.
 * Add an image count to the threads.
