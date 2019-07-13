@@ -1,12 +1,14 @@
 #!/usr/bin/python3
 
+from bs4 import BeautifulSoup   #pip install beautifulsoup4
+import requests                 #pip install requests
+import distutils.util
 import urllib
-import requests
 import json
 import re
 import os
-from bs4 import BeautifulSoup #pip install beautifulsoup4
 
+boardTotal = []
 boardLinks = []
 boardNames = []
 boardTags = []
@@ -14,31 +16,40 @@ threadLinks = []
 threadSubjects = []
 threadNumbers = []
 
-def scrapeBoards():
+def nsfwFilter():
+    nsfwSelection = distutils.util.strtobool(input("\nShow NSFW boards? (y/n)"))
+    return nsfwSelection
+
+def scrapeBoards(nsfwSelection):
     data = requests.get("http://www.4chan.org/")
     soup = BeautifulSoup(data.text, 'html.parser')
 
     for a in soup.find_all("a", {"class": "boardlink", "href": True}):
         if len(a["href"]) < 30:
             boardLinks.append(a["href"])
+            tag = a["href"][7:]
+            boardIndex = tag.index("/")
+            tag = tag[boardIndex+1:]
+            boardIndex = tag.index("/")
+            tag = tag[0:boardIndex]
+            boardTags.append(tag)
         if a.text:
             boardNames.append(a.text)
 
-    for i in boardLinks:
-        tag = i[7:]
-        boardIndex = tag.index("/")
-        tag = tag[boardIndex+1:]
-        boardIndex = tag.index("/")
-        tag = tag[0:boardIndex]
-        boardTags.append(tag)
-
     for i in range(len(boardLinks)):
-        print(str(i).zfill(2)+") /"+boardTags[i]+"/ - "+boardNames[i])
+        boardTotal.append([boardTags[i],boardNames[i],boardLinks[i]])
+        boardTotal.sort(key=lambda x:x[0])
+
+    if not nsfwSelection:
+        for i in reversed(range(len(boardTotal))):
+            if "4channel" not in boardTotal[i][2]:
+                del(boardTotal[i])
+
+    for i in range(len(boardTotal)):
+        print(str(i).zfill(2)+" /"+boardTotal[i][0]+"/ "+(" "*(4-len(boardTotal[i][0])))+boardTotal[i][1])
     boardSelection = input("\nChoose your board: ")
     boardSelection = int(boardSelection)
     return boardSelection 
-
-
 
 def scrapeThreads(boardSelection):
     try:
@@ -121,14 +132,7 @@ def scrapeImages(boardSelection, threadSelection):
         print("\nExiting papeScrape...\n")
 
 
-
-board = scrapeBoards()
+nsfw = nsfwFilter()
+board = scrapeBoards(nsfw)
 thread = scrapeThreads(board)
 scrapeImages(board, thread)
-
-#[]add alphabetical sorting
-#[]add image count
-#[]add no subject thread numbering
-#[]add concurrent download capability
-#[]add commands
-#[]add main loop
