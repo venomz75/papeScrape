@@ -7,7 +7,6 @@
 * Saves OP's message in a .txt file in that same directory
 
 ## Planned changes:
-* Add selection of threads by post number or topic.
-* Add an image count to the threads.
+* Add an image count when listing threads.
 * Add capability for multiple concurrent thread downloads.
 * Add command based interaction with the program.
