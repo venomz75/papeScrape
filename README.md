@@ -7,12 +7,18 @@
 * Files from a thread saved in it's own directory, including the OP.
 
 ## Planned changes:
-* Add an image count when listing threads
-* Add a cancel command
-* Remove jobs from the joblist once complete
+### Content:
+* Add the option to manually paste a URL to allow the user to avoid having to wait for the webscraping
+* Add the option to download all images from a board (megaScrape)
+### Commands:
 * If a board is selected more than once, instantly allow the user to choose another thread rather than having to wait for the program to parse the board once again
 * Add a refresh command to allow the user to force the program to parse previous boards again.
-* Add ASCII splashtext
-* Add the option to manually paste a URL to allow the user to avoid having to wait for the webscraper
-* Improve efficiency and reduce time complexity
+* Add a cancel job command to allow the user to stop a job prematurely
+### Misc:
+* Add ASCII splashtext/credits
+* Add an image count when listing threads
+* Remove finished jobs from the joblist after completion
 * General text formatting improvements
+### Upon full feature implementation:
+* Improve efficiency and reduce time complexity
+* Test various inputs/outputs, remove any bugs or unwanted behaviour
