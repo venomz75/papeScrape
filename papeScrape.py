@@ -1,8 +1,8 @@
 #!/usr/bin/python3
-
 from bs4 import BeautifulSoup   #pip install beautifulsoup4
 import requests                 #pip install requests
 import distutils.util
+import threading
 import urllib
 import json
 import re
@@ -10,6 +10,21 @@ import os
 
 boardList = [] #[wg, "Wallpapers/General", "URL"]
 threadList = [] #[534341, "Space papes", "URL"]
+currentJobs = [] #[[534341, "Space papes", "URL"],[wg, "Wallpapers/General", "URL"]]
+command = ""
+
+def addJob():
+    board = scrapeBoards(nsfw)
+    thread = scrapeThreads(board)
+    images = scrapeImages(board, thread)
+    boardList.clear()
+    threadList.clear()
+    downloadProcess = threading.Thread(target=downloadImages, args=(images,), daemon=True) 
+    downloadProcess.start()
+
+def listJobs():
+    for i in range(len(currentJobs)):
+        print("/"+currentJobs[i][1][0]+"/"+currentJobs[i][0][0]+": "+currentJobs[i][0][1])
 
 def linkToSoup(url):
     data = requests.get(url)
@@ -20,11 +35,9 @@ def nsfwFilter():
     nsfwSelection = distutils.util.strtobool(input("\nShow NSFW boards? (y/n): ")); print(" ")
     return nsfwSelection
 
-
 def scrapeBoards(nsfwSelection):
     soup = linkToSoup("http://www.4chan.org/")
-    boardLinks = []; boardNames = []; boardTags = []
-    
+    boardLinks = []; boardNames = []; boardTags = [] 
     for a in soup.find_all("a", {"class": "boardlink", "href": True}):
         if len(a["href"]) < 30:
             boardLinks.append(a["href"])
@@ -54,10 +67,8 @@ def scrapeBoards(nsfwSelection):
     boardSelection = i    
     return int(boardSelection)
     
-
 def scrapeThreads(boardSelection):
-    threadLinks = []; threadSubjects = []; threadNumbers = []
-    
+    threadLinks = []; threadSubjects = []; threadNumbers = [] 
     for i in range(11):
         soup = linkToSoup("http:"+boardList[boardSelection][2]+str(i))
         for div in soup.find_all("div", {"class": "thread"}):
@@ -80,7 +91,6 @@ def scrapeThreads(boardSelection):
     threadSelection = input("\nChoose your thread: ")
     return int(threadSelection)
 
-
 def scrapeImages(boardSelection, threadSelection):
     try:
         threadSelection = int(threadSelection)
@@ -94,8 +104,9 @@ def scrapeImages(boardSelection, threadSelection):
     
     soup = linkToSoup(threadList[threadSelection][2])
 
-    threadList[threadSelection][1] += threadList[threadSelection][0] if threadList[threadSelection][1] == "No subject" else threadList[threadSelection][1]
-    newdir = os.getcwd()+"/"+boardList[boardSelection][0]+"/"+re.sub('[^A-Za-z0-9]+', '', threadList[threadSelection][1])+"/"
+    filename = threadList[threadSelection][1]+threadList[threadSelection][0] if threadList[threadSelection][1] == "No subject" else threadList[threadSelection][1]
+    newdir = os.getcwd()+"/"+boardList[boardSelection][0]+"/"+re.sub('[^A-Za-z0-9]+', '', filename+"/")
+    print(newdir)
 
     try:
         if os.path.isdir(os.getcwd()+"/"+boardList[boardSelection][0]):
@@ -107,19 +118,31 @@ def scrapeImages(boardSelection, threadSelection):
         print("\nFailed to create directory "+newdir)
         print("\nExiting papeScrape...\n")
     else:
-        print("\nCreated directory "+newdir+" successfully")
-        textFile = open(newdir+"op.txt", "w"); textFile.write(soup.find("blockquote", {"class": "postMessage"}).text); textFile.close()  
-        print("\nSaved OP message as "+newdir+"op.txt\n")
+        currentJobs.append([threadList[threadSelection],boardList[boardSelection]])
+        print("\nCreated directory "+newdir+" successfully, downloading images...")
+        textFile = open(newdir+"/op.txt", "w"); textFile.write(soup.find("blockquote", {"class": "postMessage"}).text); textFile.close()  
 
+        imageList = []
         for a in soup.find_all("a", {"class": "fileThumb", "href": True}):
-            urllib.request.urlretrieve("http:"+a["href"], newdir+a["href"][19:])
-            print("Downloaded "+a["href"][19:])
+            slash = a["href"].rindex("/")
+            url = "http:"+a["href"] 
+            filepath = newdir+a["href"][slash:]
+            imageList.append([url, filepath])
 
-        print("\nAll images downloaded.")
-        print("\nExiting papeScrape...\n")
+        return imageList
 
+
+def downloadImages(imageList):
+    for i in range(len(imageList)):
+        urllib.request.urlretrieve(imageList[i][0], imageList[i][1])
 
 nsfw = nsfwFilter()
-board = scrapeBoards(nsfw)
-thread = scrapeThreads(board)
-scrapeImages(board, thread)
+print("Start a new download with the \"add\" command. Check your current jobs with \"list\"(incomplete)")
+while command != "exit":
+    command = input()
+
+    if command == "add":
+        addJob()
+    
+    if command == "list":
+        listJobs()
