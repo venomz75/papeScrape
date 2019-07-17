@@ -10,21 +10,29 @@ import os
 
 boardList = [] #[wg, "Wallpapers/General", "URL"]
 threadList = [] #[534341, "Space papes", "URL"]
-currentJobs = [] #[[534341, "Space papes", "URL"],[wg, "Wallpapers/General", "URL"]]
+currentJobs = [] #[process, [wg, "Wallpapers/General", "URL"],[534341, "Space papes", "URL"]]
 command = ""
 
 def addJob():
     board = scrapeBoards(nsfw)
     thread = scrapeThreads(board)
-    images = scrapeImages(board, thread)
-    boardList.clear()
-    threadList.clear()
+    images = scrapeImages(board, thread) 
     downloadProcess = threading.Thread(target=downloadImages, args=(images,), daemon=True) 
     downloadProcess.start()
+    job = [downloadProcess,boardList[board],threadList[thread]]
+    boardList.clear(); threadList.clear()
+    currentJobs.append(job)
+    monitorProcess = threading.Thread(target=monitorJob, args=(job,), daemon=True)
+    monitorProcess.start()
+
+def monitorJob(job):
+    while job[0].is_alive():
+        pass
+    currentJobs.remove(job)
 
 def listJobs():
     for i in range(len(currentJobs)):
-        print("/"+currentJobs[i][1][0]+"/"+currentJobs[i][0][0]+": "+currentJobs[i][0][1])
+        print("/"+currentJobs[i][1][0]+"/"+currentJobs[i][2][0]+": "+currentJobs[i][2][1])
 
 def linkToSoup(url):
     data = requests.get(url)
@@ -118,7 +126,6 @@ def scrapeImages(boardSelection, threadSelection):
         print("\nFailed to create directory "+newdir)
         print("\nExiting papeScrape...\n")
     else:
-        currentJobs.append([threadList[threadSelection],boardList[boardSelection]])
         print("\nCreated directory "+newdir+" successfully, downloading images...")
         textFile = open(newdir+"/op.txt", "w"); textFile.write(soup.find("blockquote", {"class": "postMessage"}).text); textFile.close()  
 
@@ -136,13 +143,28 @@ def downloadImages(imageList):
     for i in range(len(imageList)):
         urllib.request.urlretrieve(imageList[i][0], imageList[i][1])
 
-nsfw = nsfwFilter()
-print("Start a new download with the \"add\" command. Check your current jobs with \"list\"(incomplete)")
+nsfw = False
+print("""
+                           _____                          
+    ____  ____ _____  ___ / ___/______________ _____  ___ 
+   / __ \/ __ `/ __ \/ _ \\\\__ \/ ___/ ___/ __ `/ __ \/ _ \\
+  / /_/ / /_/ / /_/ /  __/__/ / /__/ /  / /_/ / /_/ /  __/
+ / .___/\__,_/ .___/\___/____/\___/_/   \__,_/ .___/\___/ 
+/_/         /_/                             /_/           
+                    Written by Adam Gibbs
+
+Use "help" for a list of commands along with their function.""")
 while command != "exit":
-    command = input()
+    command = input("\nAwaiting command:")
 
     if command == "add":
         addJob()
     
     if command == "list":
         listJobs()
+
+    if command == "nsfw":
+        nsfw = nsfwFilter()
+
+    if command == "help":
+        print("\nadd: Start a new thread download\nlist: Lists current jobs\nnsfw: Prompts user to enable or disable the NSFW filter\nhelp: Lists commands and their functions\nexit: Quits the application(downloads in progress will be stopped)")
