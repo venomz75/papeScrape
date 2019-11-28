@@ -1,4 +1,4 @@
-#### papeScrape is a basic Python webscraper which downloads all of the images in a 4chan thread. As the name may suggest; the initial intention was to download wallpapers from it's [/wg/](http://boards.4chan.org/wg/catalog) board.
+#### papeScrape is a basic Python webscraper which downloads all of the images in a 4chan thread. As the name may suggest; the initial intention was to download wallpapers from it's [/wg/](http://boards.4chan.org/wg/catalog) board ("pape" being short for "wallpaper"). However, making a dynamic application is always better for the user so I opened it up to the entire site (essentially feature creeping).
 
 ## Current features:
 * Include or exclude NSFW boards
