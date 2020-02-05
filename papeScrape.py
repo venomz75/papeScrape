@@ -138,14 +138,11 @@ def scrapeThreads(boardSelection):
     if cacheThreads:
         usecacheThreads = distutils.util.strtobool(input("\nUse existing thread list? (y/n): "))
         if usecacheThreads:
-            #print(tagSelection)
-            #print(cacheThreads[0][0])
             for i in range(len(cacheThreads)):
                 if tagSelection in cacheThreads[i][0]:
                     print (str(i).zfill(3)+") "+cacheThreads[i][1][0]+" - "+cacheThreads[i][1][1])
                     arrayThreads.append(cacheThreads[i][1])
             threadSelection = input("\nChoose your thread: ")
-            #print(arrayThreads)
             return int(threadSelection)
 
     #(re)generate threads
@@ -189,7 +186,6 @@ def scrapeImages(boardSelection, threadSelection):
 
     filename = arrayThreads[threadSelection][1]+arrayThreads[threadSelection][0] if arrayThreads[threadSelection][1] == "No subject" else arrayThreads[threadSelection][1]
     newdir = os.getcwd()+"/"+arrayBoards[boardSelection][0]+"/"+re.sub('[^A-Za-z0-9]+', '', filename+"/")
-    #print(newdir)
 
     try:
         if os.path.isdir(os.getcwd()+"/"+arrayBoards[boardSelection][0]):
