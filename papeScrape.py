@@ -1,11 +1,20 @@
 #!/usr/bin/python3
-from bs4 import BeautifulSoup   #pip install beautifulsoup4
+from bs4 import BeautifulSoup   #apt-get install python3-bs4
 import requests                 #pip install requests
+import threading
 import urllib
 import json
 import os
 import re
 
+#TO ADD
+#
+#When quitting, check if there are any ongoing downloads, if so prompt the user to confirm their choice.
+#Add an images downloaded/total images counter to the monitoring of threads.
+#Swap options 1 and 2
+#Sort the JSON of threads by image count ascending (bottom is seen due to large output, usually large image counts are desired)
+
+activeThreads = [] #Used to store active download threads
 
 #Entry point to the program.
 def main():    
@@ -28,7 +37,7 @@ def menu():
     stop = False
     while stop == False:
         print("""
-MENU
+=====MENU=====
 1) Manually input board and thread number.
 2) Browse threads on a board.
 3) Print ongoing jobs.
@@ -42,7 +51,7 @@ MENU
         else:
             if selection == 1: manualMode()
             elif selection == 2: browseMode()
-            elif selection == 3: urllib.request.urlretrieve("http://i.4cdn.org/wg/1581243426506.png", "1.png")
+            elif selection == 3: checkActive()
             elif selection == 4: print("Quitting!"); stop = True
 
 
@@ -54,12 +63,13 @@ def manualMode():
     soup = scrape(url)
     if soup.find_all("h2"):
         print("ERROR")
-    else:
-        download(url)
+    # else:
+    #     start download/monitor threads like usual
 
 
 #Option 2: Browse a board's threads.
 def browseMode():
+    #Initial webscrape and filtering of catalog DOM
     boardChoice = input("Board tag (e.g. wg): ")
     url = "http://boards.4chan.org/"+boardChoice+"/catalog"
     soup = scrape(url)
@@ -70,13 +80,17 @@ def browseMode():
     threadIndex = []
     index = 0
 
+    #Parse JSON for thread objects and print them
+    print("\n=====THREADS ON /"+boardChoice+"/=====")
     for thread in dictionary["threads"]:
         subject = "No subject" if not dictionary["threads"][thread]["sub"] else dictionary["threads"][thread]["sub"]
         threadIndex.append(thread)
         print(str(index)+": "+thread+" - "+subject+" - I:"+str(dictionary["threads"][thread]["i"])+" R:"+str(dictionary["threads"][thread]["r"]))
         index += 1
     
+    #User chooses a thread from the listed objects using the prior index
     threadChoice = input("Choose a thread: ")
+    #Prepare thread download by assembling target URL and directory name
     threadURL = "http://boards.4chan.org/" +boardChoice+ "/thread/" +threadIndex[int(threadChoice)]
     threadJSON = dictionary["threads"][threadIndex[int(threadChoice)]]
     boardDir = "/"+boardChoice+"/"
@@ -84,25 +98,45 @@ def browseMode():
     if not os.path.isdir(os.getcwd()+boardDir):
         createDir(boardDir)
     createDir(boardDir + threadDir)
-    download(threadURL, os.getcwd()+"/"+boardDir+"/"+threadDir)
+    #Create and start download thread
+    downloadThread = createThread(download, [threadURL, os.getcwd()+"/"+boardDir+"/"+threadDir])
+    downloadThread.start()
+    #Store data about the thread and create a monitor job with it
+    threadData = [downloadThread, boardChoice, threadIndex[int(threadChoice)], str(threadJSON["i"])]
+    activeThreads.append(threadData)
+    monitorThread = createThread(monitor, [threadData])
+    monitorThread.start()
+
+def checkActive():
+    print("\n=====ONGOING DOWNLOADS=====")
+    for i in range(len(activeThreads)):
+        print("/"+activeThreads[i][1]+"/"+activeThreads[i][2]+" - "+activeThreads[i][3]+" images")
 
 
+#Checks if a download thread is still alive and waits until it ends before removing it from the activeThreads array
+def monitor(threadData):
+    while threadData[0].is_alive():
+        pass
+    activeThreads.remove(threadData)
+
+#Downloads images from thread URL
 def download(url, filepath):
     soup = scrape(url)
-    print (url)
-    print (filepath)
 
     if not soup.find_all("a", {"class": "fileThumb", "href": True}):
         print("ERROR")
         return
     
-    imgNumber = 1
     for a in soup.find_all("a", {"class": "fileThumb", "href": True}):
-        print("http:"+a["href"])
-        print(filepath+a["href"][a["href"].rindex("/")+1:])
         urllib.request.urlretrieve("http:"+a["href"], filepath+a["href"][a["href"].rindex("/")+1:])
-        imgNumber += 1
 
+#Create thread for given function and arguments, used to tidy up and further abstract code
+def createThread(func, args):
+    thread = threading.Thread(target=func, args=(args), daemon=True)
+    return thread
+
+
+#Create given directory
 def createDir(newdir):
     filepath = os.getcwd()+newdir
     try:
@@ -114,7 +148,7 @@ def createDir(newdir):
         print("\nCreated directory "+newdir+".")
 
 
-#General webpage scrape function
+#Scrape a given webpage into soup object
 def scrape(url):
     try:
         return BeautifulSoup(requests.get(url).text, "html.parser")
