@@ -8,13 +8,6 @@ import json
 import os
 import re
 
-#TO ADD
-#
-#When quitting, check if there are any ongoing downloads, if so prompt the user to confirm their choice.
-#Add an images downloaded/total images counter to the monitoring of threads.
-#Swap options 1 and 2
-#Sort the JSON of threads by image count ascending (bottom is seen due to large output, usually large image counts are desired)
-
 activeThreads = [] #Used to store active download threads
 
 #Entry point to the program.
