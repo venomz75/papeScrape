@@ -1,6 +1,7 @@
 #!/usr/bin/python3
 from bs4 import BeautifulSoup   #apt-get install python3-bs4
 import requests                 #pip install requests
+from collections import OrderedDict
 import threading
 import urllib
 import json
@@ -37,37 +38,24 @@ def menu():
     stop = False
     while stop == False:
         print("""
+
 =====MENU=====
-1) Manually input board and thread number.
-2) Browse threads on a board.
-3) Print ongoing jobs.
-4) Quit
+1) Browse threads on a board.
+2) Print ongoing jobs.
+3) Quit
         """)
 
         try:
             selection = int(input("Select an option number: "))
         except:
-            print("Invalid input! Use a number from (1-4).")
+            print("Invalid input! Use a number from (1-3).")
         else:
-            if selection == 1: manualMode()
-            elif selection == 2: browseMode()
-            elif selection == 3: checkActive()
-            elif selection == 4: print("Quitting!"); stop = True
+            if selection == 1: browseMode()
+            elif selection == 2: checkActive()
+            elif selection == 3: print("Quitting!"); stop = True
 
 
-#Option 1: Manually enter a board and thread(post) number.
-def manualMode():
-    boardChoice = input("Board tag (e.g. wg): ")
-    threadChoice = input("Thread number: ")
-    url = "http://boards.4chan.org/" +boardChoice+ "/thread/" +threadChoice
-    soup = scrape(url)
-    if soup.find_all("h2"):
-        print("ERROR")
-    # else:
-    #     start download/monitor threads like usual
-
-
-#Option 2: Browse a board's threads.
+#Option 1: Browse a board's threads.
 def browseMode():
     #Initial webscrape and filtering of catalog DOM
     boardChoice = input("Board tag (e.g. wg): ")
@@ -76,25 +64,29 @@ def browseMode():
     script = soup.select("script")[2].get_text()
     script2 = script[script.index("var catalog"):script.index("var style_group")]
     script3 = script2[script2.index("{"):script2.rindex(";")]
-    dictionary = json.loads(script3)
+    dictionary = json.loads(script3, object_pairs_hook=OrderedDict)
     threadIndex = []
     index = 0
 
     #Parse JSON for thread objects and print them
     print("\n=====THREADS ON /"+boardChoice+"/=====")
     for thread in dictionary["threads"]:
-        subject = "No subject" if not dictionary["threads"][thread]["sub"] else dictionary["threads"][thread]["sub"]
         threadIndex.append(thread)
+           
+    threadIndex.sort(key=int)
+
+    for thread in threadIndex:
+        subject = "No subject" if not dictionary["threads"][thread]["sub"] else dictionary["threads"][thread]["sub"] 
         print(str(index)+": "+thread+" - "+subject+" - I:"+str(dictionary["threads"][thread]["i"])+" R:"+str(dictionary["threads"][thread]["r"]))
         index += 1
-    
+
     #User chooses a thread from the listed objects using the prior index
     threadChoice = input("Choose a thread: ")
     #Prepare thread download by assembling target URL and directory name
     threadURL = "http://boards.4chan.org/" +boardChoice+ "/thread/" +threadIndex[int(threadChoice)]
     threadJSON = dictionary["threads"][threadIndex[int(threadChoice)]]
     boardDir = "/"+boardChoice+"/"
-    threadDir = re.sub('[^A-Za-z0-9]+', '', threadIndex[int(threadChoice)]+"_"+threadJSON["sub"]) + "/" if threadJSON["sub"] else re.sub('[^A-Za-z0-9]+', '', threadIndex[int(threadChoice)]+"_"+threadJSON["teaser"]) + "/"
+    threadDir = re.sub('[^A-Za-z0-9_]+', '', threadIndex[int(threadChoice)]+"_"+threadJSON["sub"]) + "/" if threadJSON["sub"] else re.sub('[^A-Za-z0-9]+', '', threadIndex[int(threadChoice)]+"_"+threadJSON["teaser"]) + "/"
     if not os.path.isdir(os.getcwd()+boardDir):
         createDir(boardDir)
     createDir(boardDir + threadDir)
@@ -106,6 +98,7 @@ def browseMode():
     activeThreads.append(threadData)
     monitorThread = createThread(monitor, [threadData])
     monitorThread.start()
+
 
 def checkActive():
     print("\n=====ONGOING DOWNLOADS=====")
@@ -119,6 +112,7 @@ def monitor(threadData):
         pass
     activeThreads.remove(threadData)
 
+
 #Downloads images from thread URL
 def download(url, filepath):
     soup = scrape(url)
@@ -129,6 +123,7 @@ def download(url, filepath):
     
     for a in soup.find_all("a", {"class": "fileThumb", "href": True}):
         urllib.request.urlretrieve("http:"+a["href"], filepath+a["href"][a["href"].rindex("/")+1:])
+
 
 #Create thread for given function and arguments, used to tidy up and further abstract code
 def createThread(func, args):
