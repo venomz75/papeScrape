@@ -1,21 +1,24 @@
 #!/usr/bin/python3
-from bs4 import BeautifulSoup   #pip install beautifulsoup4
+from bs4 import BeautifulSoup   #apt-get install python3-bs4
 import requests                 #pip install requests
-import distutils.util
+from collections import OrderedDict
 import threading
 import urllib
 import json
-import re
 import os
+import re
 
-#globals
-arrayBoards, arrayThreads = [], []  #primary storage of board/thread data   
-cacheBoards, cacheThreads = [], []  #reserve storage of board/thread data   
-currentJobs = []                    #stores daemon/board/thread data of an ongoing download job
-command, tagSelection = "", ""      #user input strings
+#TO ADD
+#
+#When quitting, check if there are any ongoing downloads, if so prompt the user to confirm their choice.
+#Add an images downloaded/total images counter to the monitoring of threads.
+#Swap options 1 and 2
+#Sort the JSON of threads by image count ascending (bottom is seen due to large output, usually large image counts are desired)
 
+activeThreads = [] #Used to store active download threads
+
+#Entry point to the program.
 def main():    
-
     print("""
                                _____                          
         ____  ____ _____  ___ / ___/______________ _____  ___ 
@@ -27,227 +30,127 @@ def main():
              A 4chan imagescraper written by venomz75
              
     """)
-    print("Use \"help\" for a list of commands")
-
-def addJob():
-    #webscraping functions split by webpage accessed
-    board = scrapeBoards(nsfw)
-    thread = scrapeThreads(board)
-    images = scrapeImages(board, thread) 
-
-    #daemonises image download
-    downloadProcess = threading.Thread(target=downloadImages, args=(images,), daemon=True) 
-    downloadProcess.start()
-
-    #stores all data related to the daemon and wipes primary board/thread data
-    job = [downloadProcess,arrayBoards[board],arrayThreads[thread]]
-    arrayBoards.clear(); arrayThreads.clear()
-    currentJobs.append(job)
-
-    #monitor daemon confirms end of download daemon
-    monitorProcess = threading.Thread(target=monitorJob, args=(job,), daemon=True)
-    monitorProcess.start()
+    menu()
 
 
-def monitorJob(job):
-    #waits for download daemon to finish before removing it's information from currentJobs array
-    while job[0].is_alive():
+#The main point of user choice and interaction.
+def menu():
+    stop = False
+    while stop == False:
+        print("""
+
+=====MENU=====
+1) Browse threads on a board.
+2) Print ongoing jobs.
+3) Quit
+        """)
+
+        try:
+            selection = int(input("Select an option number: "))
+        except:
+            print("Invalid input! Use a number from (1-3).")
+        else:
+            if selection == 1: browseMode()
+            elif selection == 2: checkActive()
+            elif selection == 3: print("Quitting!"); stop = True
+
+
+#Option 1: Browse a board's threads.
+def browseMode():
+    #Initial webscrape and filtering of catalog DOM
+    boardChoice = input("Board tag (e.g. wg): ")
+    url = "http://boards.4chan.org/"+boardChoice+"/catalog"
+    soup = scrape(url)
+    script = soup.select("script")[2].get_text()
+    script2 = script[script.index("var catalog"):script.index("var style_group")]
+    script3 = script2[script2.index("{"):script2.rindex(";")]
+    dictionary = json.loads(script3, object_pairs_hook=OrderedDict)
+    threadIndex = []
+    index = 0
+
+    #Parse JSON for thread objects and print them
+    print("\n=====THREADS ON /"+boardChoice+"/=====")
+    for thread in dictionary["threads"]:
+        threadIndex.append(thread)
+           
+    threadIndex.sort(key=int)
+
+    for thread in threadIndex:
+        subject = "No subject" if not dictionary["threads"][thread]["sub"] else dictionary["threads"][thread]["sub"] 
+        print(str(index)+": "+thread+" - "+subject+" - I:"+str(dictionary["threads"][thread]["i"])+" R:"+str(dictionary["threads"][thread]["r"]))
+        index += 1
+
+    #User chooses a thread from the listed objects using the prior index
+    threadChoice = input("Choose a thread: ")
+    #Prepare thread download by assembling target URL and directory name
+    threadURL = "http://boards.4chan.org/" +boardChoice+ "/thread/" +threadIndex[int(threadChoice)]
+    threadJSON = dictionary["threads"][threadIndex[int(threadChoice)]]
+    boardDir = "/"+boardChoice+"/"
+    threadDir = re.sub('[^A-Za-z0-9_]+', '', threadIndex[int(threadChoice)]+"_"+threadJSON["sub"]) + "/" if threadJSON["sub"] else re.sub('[^A-Za-z0-9]+', '', threadIndex[int(threadChoice)]+"_"+threadJSON["teaser"]) + "/"
+    if not os.path.isdir(os.getcwd()+boardDir):
+        createDir(boardDir)
+    createDir(boardDir + threadDir)
+    #Create and start download thread
+    downloadThread = createThread(download, [threadURL, os.getcwd()+"/"+boardDir+"/"+threadDir])
+    downloadThread.start()
+    #Store data about the thread and create a monitor job with it
+    threadData = [downloadThread, boardChoice, threadIndex[int(threadChoice)], str(threadJSON["i"])]
+    activeThreads.append(threadData)
+    monitorThread = createThread(monitor, [threadData])
+    monitorThread.start()
+
+
+def checkActive():
+    print("\n=====ONGOING DOWNLOADS=====")
+    for i in range(len(activeThreads)):
+        print("/"+activeThreads[i][1]+"/"+activeThreads[i][2]+" - "+activeThreads[i][3]+" images")
+
+
+#Checks if a download thread is still alive and waits until it ends before removing it from the activeThreads array
+def monitor(threadData):
+    while threadData[0].is_alive():
         pass
-    currentJobs.remove(job)
+    activeThreads.remove(threadData)
 
 
-def listJobs():
-    #lists download daemons currently in progress
-    for i in range(len(currentJobs)):
-        print("/"+currentJobs[i][1][0]+"/"+currentJobs[i][2][0]+": "+currentJobs[i][2][1])
+#Downloads images from thread URL
+def download(url, filepath):
+    soup = scrape(url)
 
-
-def linkToSoup(url):
-    #webscrape procedure
-    data = requests.get(url)
-    soup = BeautifulSoup(data.text, 'html.parser')
-    return soup
-
-
-def nsfwFilter():
-    #prompts the user for their preference on nsfw content
-    nsfwSelection = distutils.util.strtobool(input("\n4chan will contain mature/offensive content. Show NSFW boards? (y/n): ")); print(" ")
-    return nsfwSelection
-
-
-def scrapeBoards(nsfwSelection):
-    #loads list of boards
-    if cacheBoards:
-        usecacheBoards = distutils.util.strtobool(input("\nUse existing board list? (y/n): "))
-
-        if usecacheBoards:
-            for i in range(len(cacheBoards)):
-                print("/"+cacheBoards[i][0]+"/ "+(" "*(4-len(cacheBoards[i][0])))+cacheBoards[i][1])
-                arrayBoards.append(cacheBoards[i])
-
-            tagSelection = input("\nChoose your board: ")
-            i=0
-
-            while cacheBoards[i][0] != tagSelection:
-                i += 1
-
-            print("\nParsing /"+cacheBoards[i][0]+"/, please wait...\n")
-            boardSelection = i    
-            return int(boardSelection)
-    #(re)generate board list
-    cacheBoards.clear()
-    soup = linkToSoup("http://www.4chan.org/")
-    boardLinks = []; boardNames = []; boardTags = [] 
-    for a in soup.find_all("a", {"class": "boardlink", "href": True}):
-        if len(a["href"]) < 30:
-            boardLinks.append(a["href"])
-            slash1 = a["href"].index("/", 2) + 1; slash2 = a["href"].rindex("/")
-            tag = a["href"][slash1:slash2] 
-            boardTags.append(tag)
-
-        if a.text:
-            boardNames.append(a.text)
-
-    for i in range(len(boardLinks)):
-        arrayBoards.append([boardTags[i],boardNames[i],boardLinks[i]])
-        arrayBoards.sort(key=lambda x:x[0])
-
-    if not nsfwSelection:
-        for i in reversed(range(len(arrayBoards))):
-            if "4channel" not in arrayBoards[i][2]:
-                del(arrayBoards[i])
-
-    for i in range(len(arrayBoards)):
-        print("/"+arrayBoards[i][0]+"/ "+(" "*(4-len(arrayBoards[i][0])))+arrayBoards[i][1])
-        cacheBoards.append(arrayBoards[i])
-
-    tagSelection = input("\nChoose your board: ")
-
-    i=0
-    while arrayBoards[i][0] != tagSelection:
-        i += 1
-
-    print("\nParsing /"+arrayBoards[i][0]+"/, please wait...\n") 
-    boardSelection = i    
-    return int(boardSelection)
-
-
-def scrapeThreads(boardSelection):
-    threadLinks = []; threadSubjects = []; threadNumbers = []
-    #load list of threads
-    if cacheThreads:
-        usecacheThreads = distutils.util.strtobool(input("\nUse existing thread list? (y/n): "))
-        if usecacheThreads:
-            #print(tagSelection)
-            #print(cacheThreads[0][0])
-            for i in range(len(cacheThreads)):
-                if tagSelection in cacheThreads[i][0]:
-                    print (str(i).zfill(3)+") "+cacheThreads[i][1][0]+" - "+cacheThreads[i][1][1])
-                    arrayThreads.append(cacheThreads[i][1])
-            threadSelection = input("\nChoose your thread: ")
-            #print(arrayThreads)
-            return int(threadSelection)
-
-    #(re)generate threads
-    cacheThreads.clear()
-    for i in range(11):
-        soup = linkToSoup("http:"+arrayBoards[boardSelection][2]+str(i))
-        for div in soup.find_all("div", {"class": "thread"}):
-            threadNumbers.append(div["id"][1:])
-            threadLinks.append("http:"+arrayBoards[boardSelection][2]+"thread/"+div["id"][1:])
-        for div in soup.find_all("div", {"class": "postInfo desktop"}):
-            for span in div.find_all("span", {"class": "subject"}):
-                if not span.text:
-                    threadSubjects.append("No subject")
-                else:
-                    threadSubjects.append(span.text)
-
-    for i in range(len(threadLinks)):
-        arrayThreads.append([threadNumbers[i],threadSubjects[i],threadLinks[i]])
-        arrayThreads.sort(key=lambda x:x[0])
-
-    for i in range(len(arrayThreads)):
-        print (str(i).zfill(3)+") "+arrayThreads[i][0]+" - "+arrayThreads[i][1])
-        cacheThreads.append([arrayBoards[boardSelection][0],arrayThreads[i]])
-    threadSelection = input("\nChoose your thread: ")
-    return int(threadSelection)
-
-
-def scrapeImages(boardSelection, threadSelection):
-    #store image data in array
-    try:
-        threadSelection = int(threadSelection)
-    except ValueError:
-        print("\nInvalid input!")
-    else:
-        if threadSelection > 149 or threadSelection < 0:
-            print("\nInvalid input!")
-        else:
-            print("\nDownloading images from thread #"+arrayThreads[threadSelection][0]+" on /"+arrayBoards[boardSelection][0]+"/, please wait...")
+    if not soup.find_all("a", {"class": "fileThumb", "href": True}):
+        print("ERROR")
+        return
     
-    soup = linkToSoup(arrayThreads[threadSelection][2])
+    for a in soup.find_all("a", {"class": "fileThumb", "href": True}):
+        urllib.request.urlretrieve("http:"+a["href"], filepath+a["href"][a["href"].rindex("/")+1:])
 
-    filename = arrayThreads[threadSelection][1]+arrayThreads[threadSelection][0] if arrayThreads[threadSelection][1] == "No subject" else arrayThreads[threadSelection][1]
-    newdir = os.getcwd()+"/"+arrayBoards[boardSelection][0]+"/"+re.sub('[^A-Za-z0-9]+', '', filename+"/")
-    #print(newdir)
 
+#Create thread for given function and arguments, used to tidy up and further abstract code
+def createThread(func, args):
+    thread = threading.Thread(target=func, args=(args), daemon=True)
+    return thread
+
+
+#Create given directory
+def createDir(newdir):
+    filepath = os.getcwd()+newdir
     try:
-        if os.path.isdir(os.getcwd()+"/"+arrayBoards[boardSelection][0]):
-            os.mkdir(newdir)  
-        else:
-            os.mkdir(arrayBoards[boardSelection][0])
-            os.mkdir(newdir)
+        os.mkdir(filepath)
     except OSError:
-        print("\nFailed to create directory "+newdir)
+        print("\nFailed to create directory "+filepath)
         print("\nExiting papeScrape...\n")
     else:
-        print("\nCreated directory "+newdir+" successfully, downloading images...")
-        textFile = open(newdir+"/op.txt", "w"); textFile.write(soup.find("blockquote", {"class": "postMessage"}).text); textFile.close()  
-
-        imageList = []
-        for a in soup.find_all("a", {"class": "fileThumb", "href": True}):
-            slash = a["href"].rindex("/")
-            url = "http:"+a["href"] 
-            filepath = newdir+a["href"][slash:]
-            imageList.append([url, filepath])
-
-        return imageList
+        print("\nCreated directory "+newdir+".")
 
 
-def downloadImages(imageList):
-    #download images in image array
-    for i in range(len(imageList)):
-        urllib.request.urlretrieve(imageList[i][0], imageList[i][1])
+#Scrape a given webpage into soup object
+def scrape(url):
+    try:
+        return BeautifulSoup(requests.get(url).text, "html.parser")
+    except:
+        print("Invalid URL!")
 
 
-#entry point
-print("""
-                           _____                          
-    ____  ____ _____  ___ / ___/______________ _____  ___ 
-   / __ \/ __ `/ __ \/ _ \\\\__ \/ ___/ ___/ __ `/ __ \/ _ \\
-  / /_/ / /_/ / /_/ /  __/__/ / /__/ /  / /_/ / /_/ /  __/
- / .___/\__,_/ .___/\___/____/\___/_/   \__,_/ .___/\___/ 
-/_/         /_/                             /_/           
-
-         A 4chan imagescraper written by venomz75
-             
-""")
-print("Use \"help\" for a list of commands")
-
-nsfw = nsfwFilter()
-while command != "exit":
-    command = input("\nAwaiting command:")
-
-    if command == "add":
-        addJob()
-        
-    if command == "jobs":
-        listJobs()
-
-    if command == "nsfw":
-        nsfw = nsfwFilter()
-
-    if command == "help":
-        print("\nbrowse: Choose a thread to scrape by selecting a board and thread\nadd: Manually paste a thread URL without browsing boards and threads\njobs: Lists current jobs\nnsfw: Prompts user to enable or disable the NSFW filter\nhelp: Returns this menu\nexit: Quits the application(downloads in progress will be stopped)")
-
-
+#Define entry point
+if __name__ == '__main__':
+    main()
